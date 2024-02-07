@@ -10,16 +10,16 @@ from library import utils, GaussianClassifier as GC, LogisticRegression as LR, S
 
 
 # # Load data
-def load_data(defPath = ''):
+def load_data(defPath = 'HTRU2\library\htru2_data\data'):
     print('Loading data ...')
     # # class 1 -> Positive pulsar signal
     # # class 0 -> Negative pulsar signal
-    (DTR, LTR), (DTE, LTE) = utils.load_dataset_shuffle(defPath + 'data/Train.txt', defPath + 'data/Test.txt', 8)
+    (DTR, LTR), (DTE, LTE) = utils.load_dataset_shuffle(defPath + '\Train.txt', defPath + '\Test.txt', 8)
     # DTRg, DTEg = utils.features_gaussianization(DTR, DTE)
     print('Done.\n\n')
     return (DTR, LTR), (DTE, LTE)
 
-
+'./'
 # # Plot of the features
 def plot_features(DTR, LTR):
     print('Plotting features ...')
@@ -114,15 +114,18 @@ def logistic_regression_report(DTR, LTR):
         if(i > 0):
             PCA_ = utils.PCA(DTR, DTR.shape[0] - i)
             DTRpca = PCA_[0]
-        print('LogReg(λ = 1e-5, πT = 0.5)')
+        print('LogReg(lambda = 1e-5, piT = 0.5)')
+
         for pi in priors:
             minDCF = utils.kfolds(DTRpca, LTR, pi, model, (1e-5, priors[0]))[0]
             print(f'- with prior = {pi} -> minDCF = %.3f' % minDCF)
-        print('LogReg(λ = 1e-5, πT = 0.1)')
+        print('LogReg(lambda = 1e-5, piT = 0.1)')
+
         for pi in priors:
             minDCF = utils.kfolds(DTRpca, LTR, pi, model, (1e-5, priors[1]))[0]
             print(f'- with prior = {pi} -> minDCF = %.3f' % minDCF)
-        print('LogReg(λ = 1e-5, πT = 0.9)')
+        print('LogReg(lambda = 1e-5, piT = 0.9)')
+
         for pi in priors:
             minDCF = utils.kfolds(DTRpca, LTR, pi, model, (1e-5, priors[2]))[0]
             print(f'- with prior = {pi} -> minDCF = %.3f' % minDCF)
