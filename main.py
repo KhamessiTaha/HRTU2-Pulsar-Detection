@@ -10,11 +10,11 @@ from library import utils, GaussianClassifier as GC, LogisticRegression as LR, S
 
 
 # # Load data
-def load_data(defPath = 'HTRU2\library\htru2_data\data'):
+def load_data(defPath = ''):
     print('Loading data ...')
     # # class 1 -> Positive pulsar signal
     # # class 0 -> Negative pulsar signal
-    (DTR, LTR), (DTE, LTE) = utils.load_dataset_shuffle(defPath + '\Train.txt', defPath + '\Test.txt', 8)
+    (DTR, LTR), (DTE, LTE) = utils.load_dataset_shuffle(defPath + 'Train.txt', defPath + 'Test.txt', 8)
     # DTRg, DTEg = utils.features_gaussianization(DTR, DTE)
     print('Done.\n\n')
     return (DTR, LTR), (DTE, LTE)

@@ -209,7 +209,7 @@ def plot_features(DTR, LTR, name, defPath = ''):
         plt.hist(D0[i, :], bins=70, density=True, alpha=0.7, facecolor='orange', label='Negative pulsar signal', edgecolor='darkorange')
         plt.hist(D1[i, :], bins=70, density=True, alpha=0.7, facecolor='cornflowerblue', label='Positive pulsar signal', edgecolor='royalblue')
         plt.legend(loc='best')
-        plt.savefig(defPath + 'img/features/%s_%d.jpg' % (name, i), dpi=300, bbox_inches='tight')
+        plt.savefig(defPath + '%s_%d.jpg' % (name, i), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
 
@@ -230,7 +230,7 @@ def plot_correlations(DTR, LTR, defPath = ''):
         fig = plt.figure()
         plt.title(labels[i])
         plt.imshow(CorrCoeff[i], cmap=cmap[i], interpolation='nearest')
-        plt.savefig(defPath + 'img/heatmaps/heatmap_%d.jpg' % i, dpi=300, bbox_inches='tight')
+        plt.savefig(defPath + 'heatmap_%d.jpg' % i, dpi=300, bbox_inches='tight')
         plt.close(fig)
 
 
@@ -282,7 +282,7 @@ def plot_minDCF_lr(l, y5, y1, y9, filename, title, defPath = ''):
     plt.xlabel('λ')
     plt.ylabel('minDCF')
     plt.legend(loc='best')
-    plt.savefig(defPath + 'img/minDCF/lr_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
+    plt.savefig(defPath + 'lr_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
 
@@ -302,7 +302,7 @@ def plot_minDCF_svm(C, y5, y1, y9, filename, title, type='linear', defPath = '')
     plt.xlabel('C')
     plt.ylabel('minDCF')
     plt.legend(loc='best')
-    plt.savefig(defPath + 'img/minDCF/svm_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
+    plt.savefig(defPath + 'svm_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
 
@@ -316,7 +316,7 @@ def plot_minDCF_gmm(components, y5, y1, y9, filename, title, defPath = ''):
     plt.xlabel('components')
     plt.ylabel('minDCF')
     plt.legend(loc='best')
-    plt.savefig(defPath + 'img/minDCF/gmm_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
+    plt.savefig(defPath + 'gmm_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
 
@@ -330,7 +330,7 @@ def bayes_error_plot(p, minDCF, actDCF, filename, title, defPath = ''):
     plt.xlabel('prior')
     plt.ylabel('minDCF')
     plt.legend(loc='best')
-    plt.savefig(defPath + 'img/bep/bep_%s.jpg' % filename, dpi=300, bbox_inches='tight')
+    plt.savefig(defPath + 'bep_%s.jpg' % filename, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
 
@@ -343,7 +343,7 @@ def plot_ROC(results, LTE, filename, title, defPath = ''):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.legend(loc='best')
-    plt.savefig(defPath + 'img/eval/roc_%s.jpg' % filename, dpi=300, bbox_inches='tight')
+    plt.savefig(defPath + 'roc_%s.jpg' % filename, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
 def plot_DET(results, LTE, filename, title, defPath = ''):
@@ -355,5 +355,5 @@ def plot_DET(results, LTE, filename, title, defPath = ''):
     plt.xlabel('False Positive Rate')
     plt.ylabel('False Negative Rate')
     plt.legend(loc='best')
-    plt.savefig(defPath + 'img/eval/det_%s.jpg' % filename, dpi=300, bbox_inches='tight')
+    plt.savefig(defPath + 'det_%s.jpg' % filename, dpi=300, bbox_inches='tight')
     plt.close(fig)

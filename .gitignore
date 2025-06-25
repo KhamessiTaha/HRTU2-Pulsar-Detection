@@ -1,0 +1,22 @@
+# Updated .gitignore
+data
+data/raw/
+results/
+
+# Byte-compiled
+__pycache__/
+*.py[cod]
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Environments
+venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
