@@ -1,359 +1,512 @@
-import numpy
+import numpy as np
 import scipy.stats
-import library.LogisticRegression as LR
+import scipy.linalg
 import matplotlib.pyplot as plt
+from typing import Tuple, Optional, List, Union, Dict, Any
+from pathlib import Path
+import warnings
 
 
-
-def load_dataset_shuffle(filename1, filename2, features):
-    dList = []
-    lList = []
-
-    with(open(filename1, 'r')) as f:
-        for line in f:
-            attr = line.split(',')[0:features]
-            attr = numpy.array([i for i in attr])
-            attr = vcol(attr)
-            clss = line.split(',')[-1].strip()
-            dList.append(attr)
-            lList.append(clss)
-    DTR = numpy.hstack(numpy.array(dList, dtype=numpy.float32))
-    DTRmean = empirical_mean(DTR)
-    DTRstd = vcol(numpy.std(DTR, axis=1))
-    DTR = (DTR - DTRmean) / DTRstd
-    LTR = numpy.array(lList, dtype=numpy.int32)
-
-    with(open(filename2, 'r')) as f:
-        for line in f:
-            attr = line.split(',')[0:features]
-            attr = numpy.array([i for i in attr])
-            attr = vcol(attr)
-            clss = line.split(',')[-1].strip()
-            dList.append(attr)
-            lList.append(clss)
-    DTE = numpy.hstack(numpy.array(dList, dtype=numpy.float32))
-    DTE = (DTE - DTRmean) / DTRstd
-    LTE = numpy.array(lList, dtype=numpy.int32)
-
-    return shuffle_dataset(DTR, LTR), shuffle_dataset(DTE, LTE)
+class MLUtils:
+    """Machine Learning utilities for classification tasks."""
+    
+    @staticmethod
+    def vrow(v: np.ndarray) -> np.ndarray:
+        """Convert vector to row vector."""
+        return v.reshape(1, v.size)
+    
+    @staticmethod
+    def vcol(v: np.ndarray) -> np.ndarray:
+        """Convert vector to column vector."""
+        return v.reshape(v.size, 1)
+    
+    @staticmethod
+    def empirical_mean(X: np.ndarray) -> np.ndarray:
+        """Compute empirical mean of dataset."""
+        return MLUtils.vcol(X.mean(axis=1))
+    
+    @staticmethod
+    def empirical_covariance(X: np.ndarray) -> np.ndarray:
+        """Compute empirical covariance matrix."""
+        mu = MLUtils.empirical_mean(X)
+        centered = X - mu
+        return np.dot(centered, centered.T) / X.shape[1]
 
 
-def shuffle_dataset(D, L):
-    numpy.random.seed(0)
-    idx = numpy.random.permutation(D.shape[1])
-    return D[:, idx], L[idx]
+class DataLoader:
+    """Data loading and preprocessing utilities."""
+    
+    @staticmethod
+    def load_dataset_shuffle(
+        train_file: Union[str, Path], 
+        test_file: Union[str, Path], 
+        n_features: int,
+        standardize: bool = True,
+        random_seed: int = 0
+    ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
+        """
+        Load and preprocess training and test datasets.
+        
+        Args:
+            train_file: Path to training data file
+            test_file: Path to test data file
+            n_features: Number of features to use
+            standardize: Whether to standardize features
+            random_seed: Random seed for reproducibility
+            
+        Returns:
+            ((DTR, LTR), (DTE, LTE)): Training and test data/labels
+        """
+        def _load_file(filename: Union[str, Path]) -> Tuple[List[np.ndarray], List[int]]:
+            data_list, label_list = [], []
+            
+            with open(filename, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) < n_features + 1:
+                        continue
+                        
+                    features = np.array(parts[:n_features], dtype=np.float32)
+                    label = int(parts[-1])
+                    
+                    data_list.append(MLUtils.vcol(features))
+                    label_list.append(label)
+            
+            return data_list, label_list
+        
+        # Load training data
+        train_data_list, train_label_list = _load_file(train_file)
+        DTR = np.hstack(train_data_list)
+        LTR = np.array(train_label_list, dtype=np.int32)
+        
+        # Compute standardization parameters on training data
+        if standardize:
+            train_mean = MLUtils.empirical_mean(DTR)
+            train_std = MLUtils.vcol(np.std(DTR, axis=1))
+            train_std = np.where(train_std == 0, 1, train_std)  # Avoid division by zero
+            DTR = (DTR - train_mean) / train_std
+        
+        # Load and standardize test data
+        test_data_list, test_label_list = _load_file(test_file)
+        DTE = np.hstack(test_data_list)
+        LTE = np.array(test_label_list, dtype=np.int32)
+        
+        if standardize:
+            DTE = (DTE - train_mean) / train_std
+        
+        # Shuffle datasets
+        np.random.seed(random_seed)
+        train_idx = np.random.permutation(DTR.shape[1])
+        test_idx = np.random.permutation(DTE.shape[1])
+        
+        return (DTR[:, train_idx], LTR[train_idx]), (DTE[:, test_idx], LTE[test_idx])
+    
+    @staticmethod
+    def split_dataset(
+        D: np.ndarray, 
+        L: np.ndarray, 
+        train_ratio: float = 2/3,
+        random_seed: int = 0
+    ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
+        """Split dataset into training and test sets."""
+        n_train = int(D.shape[1] * train_ratio)
+        
+        np.random.seed(random_seed)
+        indices = np.random.permutation(D.shape[1])
+        
+        train_idx = indices[:n_train]
+        test_idx = indices[n_train:]
+        
+        return (D[:, train_idx], L[train_idx]), (D[:, test_idx], L[test_idx])
 
 
-def split_db_2to1(D, L):
-    nTrain = int(D.shape[1] * 2./3.)
-    numpy.random.seed(0)
-    index = numpy.random.permutation(D.shape[1])
-    iTrain = index[0:nTrain]
-    iTest = index[nTrain:]
-    DTR = D[:, iTrain]
-    DTE = D[:, iTest]
-    LTR = L[iTrain]
-    LTE = L[iTest]
-    return (DTR, LTR), (DTE, LTE)
-
-
-def features_gaussianization(DTR, DTE):
-    rankDTR = numpy.zeros(DTR.shape)
-    for i in range(DTR.shape[0]):
-        for j in range(DTR.shape[1]):
-            rankDTR[i][j] = (DTR[i] < DTR[i][j]).sum()
-    rankDTR = (rankDTR + 1) / (DTR.shape[1] + 2)
-    if(DTE is not None):
-        rankDTE = numpy.zeros(DTE.shape)
+class FeatureProcessor:
+    """Feature processing utilities."""
+    
+    @staticmethod
+    def gaussianization(
+        DTR: np.ndarray, 
+        DTE: Optional[np.ndarray] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """Apply Gaussian rank transformation to features."""
+        # Compute ranks for training data
+        rank_DTR = np.zeros_like(DTR)
+        for i in range(DTR.shape[0]):
+            for j in range(DTR.shape[1]):
+                rank_DTR[i, j] = (DTR[i] < DTR[i, j]).sum()
+        
+        rank_DTR = (rank_DTR + 1) / (DTR.shape[1] + 2)
+        gaussianized_DTR = scipy.stats.norm.ppf(rank_DTR)
+        
+        if DTE is None:
+            return gaussianized_DTR
+        
+        # Compute ranks for test data using training distribution
+        rank_DTE = np.zeros_like(DTE)
         for i in range(DTE.shape[0]):
             for j in range(DTE.shape[1]):
-                rankDTE[i][j] = (DTR[i] < DTE[i][j]).sum() + 1
-        rankDTE /= (DTR.shape[1] + 2)
-        return scipy.stats.norm.ppf(rankDTR), scipy.stats.norm.ppf(rankDTE)
-    return scipy.stats.norm.ppf(rankDTR)
+                rank_DTE[i, j] = (DTR[i] < DTE[i, j]).sum() + 1
+        
+        rank_DTE /= (DTR.shape[1] + 2)
+        gaussianized_DTE = scipy.stats.norm.ppf(rank_DTE)
+        
+        return gaussianized_DTR, gaussianized_DTE
+    
+    @staticmethod
+    def PCA(D: np.ndarray, m: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Principal Component Analysis dimensionality reduction."""
+        centered_data = D - MLUtils.empirical_mean(D)
+        covariance = np.dot(centered_data, centered_data.T) / centered_data.shape[1]
+        
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+        
+        # Sort by eigenvalue magnitude (descending)
+        sorted_indices = np.argsort(eigenvalues)[::-1]
+        projection_matrix = eigenvectors[:, sorted_indices[:m]]
+        
+        return np.dot(projection_matrix.T, D), projection_matrix
+    
+    @staticmethod
+    def LDA(D: np.ndarray, L: np.ndarray, m: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Linear Discriminant Analysis dimensionality reduction."""
+        SW = CovarianceUtils.within_class_covariance(D, L)
+        SB = CovarianceUtils.between_class_covariance(D, L)
+        
+        eigenvalues, eigenvectors = scipy.linalg.eigh(SB, SW)
+        
+        # Sort by eigenvalue magnitude (descending)
+        sorted_indices = np.argsort(eigenvalues)[::-1]
+        projection_matrix = eigenvectors[:, sorted_indices[:m]]
+        
+        return np.dot(projection_matrix.T, D), projection_matrix
 
 
-def empirical_withinclass_cov(D, labels):
-    SW = 0
-    for i in set(list(labels)):
-        X = D[:, labels == i]
-        SW += X.shape[1] * empirical_covariance(X)
-    return SW / D.shape[1]
+class CovarianceUtils:
+    """Covariance matrix computation utilities."""
+    
+    @staticmethod
+    def within_class_covariance(D: np.ndarray, L: np.ndarray) -> np.ndarray:
+        """Compute within-class covariance matrix."""
+        SW = np.zeros((D.shape[0], D.shape[0]))
+        
+        for class_label in np.unique(L):
+            class_data = D[:, L == class_label]
+            class_cov = MLUtils.empirical_covariance(class_data)
+            SW += class_data.shape[1] * class_cov
+        
+        return SW / D.shape[1]
+    
+    @staticmethod
+    def between_class_covariance(D: np.ndarray, L: np.ndarray) -> np.ndarray:
+        """Compute between-class covariance matrix."""
+        SB = np.zeros((D.shape[0], D.shape[0]))
+        global_mean = MLUtils.empirical_mean(D)
+        
+        for class_label in np.unique(L):
+            class_data = D[:, L == class_label]
+            class_mean = MLUtils.empirical_mean(class_data)
+            mean_diff = class_mean - global_mean
+            
+            SB += class_data.shape[1] * np.dot(mean_diff, mean_diff.T)
+        
+        return SB / D.shape[1]
 
 
-def empirical_betweenclass_cov(D, labels):
-    SB = 0
-    muGlob = empirical_mean(D)  # mean of the dataset
-    for i in set(list(labels)):
-        X = D[:, labels == i]
-        mu = empirical_mean(X)  # mean of the class
-        SB += X.shape[1] * numpy.dot((mu - muGlob), (mu - muGlob).T)
-    return SB / D.shape[1]
+class ClassificationMetrics:
+    """Classification evaluation metrics."""
+    
+    @staticmethod
+    def assign_labels(
+        scores: np.ndarray, 
+        pi: float, 
+        Cfn: float, 
+        Cfp: float, 
+        threshold: Optional[float] = None
+    ) -> np.ndarray:
+        """Assign binary labels based on scores and costs."""
+        if threshold is None:
+            threshold = -np.log(pi * Cfn) + np.log((1 - pi) * Cfp)
+        
+        return (scores > threshold).astype(np.int32)
+    
+    @staticmethod
+    def confusion_matrix(predictions: np.ndarray, labels: np.ndarray) -> np.ndarray:
+        """Compute 2x2 confusion matrix."""
+        conf_matrix = np.zeros((2, 2), dtype=int)
+        
+        conf_matrix[0, 0] = np.sum((predictions == 0) & (labels == 0))  # TN
+        conf_matrix[0, 1] = np.sum((predictions == 0) & (labels == 1))  # FN
+        conf_matrix[1, 0] = np.sum((predictions == 1) & (labels == 0))  # FP
+        conf_matrix[1, 1] = np.sum((predictions == 1) & (labels == 1))  # TP
+        
+        return conf_matrix
+    
+    @staticmethod
+    def DCF_unnormalized(conf_matrix: np.ndarray, pi: float, Cfn: float, Cfp: float) -> float:
+        """Compute unnormalized Detection Cost Function."""
+        FNR = conf_matrix[0, 1] / (conf_matrix[0, 1] + conf_matrix[1, 1]) if (conf_matrix[0, 1] + conf_matrix[1, 1]) > 0 else 0
+        FPR = conf_matrix[1, 0] / (conf_matrix[0, 0] + conf_matrix[1, 0]) if (conf_matrix[0, 0] + conf_matrix[1, 0]) > 0 else 0
+        
+        return pi * Cfn * FNR + (1 - pi) * Cfp * FPR
+    
+    @staticmethod
+    def DCF_normalized(conf_matrix: np.ndarray, pi: float, Cfn: float, Cfp: float) -> float:
+        """Compute normalized Detection Cost Function."""
+        dcf_unnorm = ClassificationMetrics.DCF_unnormalized(conf_matrix, pi, Cfn, Cfp)
+        dcf_dummy = min(pi * Cfn, (1 - pi) * Cfp)
+        
+        return dcf_unnorm / dcf_dummy if dcf_dummy > 0 else float('inf')
+    
+    @staticmethod
+    def min_DCF(scores: np.ndarray, labels: np.ndarray, pi: float, Cfn: float, Cfp: float) -> float:
+        """Compute minimum Detection Cost Function over all thresholds."""
+        thresholds = np.sort(scores)
+        thresholds = np.concatenate([[-np.inf], thresholds, [np.inf]])
+        
+        dcf_values = []
+        for threshold in thresholds:
+            predictions = ClassificationMetrics.assign_labels(scores, pi, Cfn, Cfp, threshold)
+            conf_matrix = ClassificationMetrics.confusion_matrix(predictions, labels)
+            dcf = ClassificationMetrics.DCF_normalized(conf_matrix, pi, Cfn, Cfp)
+            dcf_values.append(dcf)
+        
+        return np.min(dcf_values)
+    
+    @staticmethod
+    def actual_DCF(
+        scores: np.ndarray, 
+        labels: np.ndarray, 
+        pi: float, 
+        Cfn: float, 
+        Cfp: float, 
+        threshold: Optional[float] = None
+    ) -> float:
+        """Compute actual Detection Cost Function for given threshold."""
+        predictions = ClassificationMetrics.assign_labels(scores, pi, Cfn, Cfp, threshold)
+        conf_matrix = ClassificationMetrics.confusion_matrix(predictions, labels)
+        return ClassificationMetrics.DCF_normalized(conf_matrix, pi, Cfn, Cfp)
+    
+    @staticmethod
+    def compute_ROC_DET_curves(scores: np.ndarray, labels: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Compute ROC and DET curve points."""
+        thresholds = np.sort(scores)
+        thresholds = np.concatenate([[-np.inf], thresholds, [np.inf]])
+        
+        FPR_list, FNR_list = [], []
+        
+        for threshold in thresholds:
+            predictions = (scores > threshold).astype(int)
+            conf_matrix = ClassificationMetrics.confusion_matrix(predictions, labels)
+            
+            # Handle edge cases
+            if conf_matrix[0, 0] + conf_matrix[1, 0] > 0:
+                FPR = conf_matrix[1, 0] / (conf_matrix[0, 0] + conf_matrix[1, 0])
+            else:
+                FPR = 0.0
+                
+            if conf_matrix[0, 1] + conf_matrix[1, 1] > 0:
+                FNR = conf_matrix[0, 1] / (conf_matrix[0, 1] + conf_matrix[1, 1])
+            else:
+                FNR = 0.0
+            
+            FPR_list.append(FPR)
+            FNR_list.append(FNR)
+        
+        FPR = np.array(FPR_list)
+        FNR = np.array(FNR_list)
+        TPR = 1 - FNR
+        TNR = 1 - FPR
+        
+        return FPR, FNR, TNR, TPR
 
 
-def vrow(v):
-    return v.reshape(1, v.size)
+class ModelEvaluation:
+    """Model evaluation utilities."""
+    
+    @staticmethod
+    def k_fold_validation(
+        D: np.ndarray,
+        L: np.ndarray,
+        pi: float,
+        model: Any,
+        model_args: Tuple,
+        k_folds: int = 5,
+        calibrated: bool = False,
+        Cfn: float = 1.0,
+        Cfp: float = 1.0,
+        random_seed: int = 0
+    ) -> Tuple[float, float]:
+        """Perform k-fold cross-validation."""
+        np.random.seed(random_seed)
+        indices = np.random.permutation(D.shape[1])
+        
+        fold_size = D.shape[1] // k_folds
+        all_scores = []
+        all_labels = []
+        
+        for fold in range(k_folds):
+            # Define test fold indices
+            start_idx = fold * fold_size
+            end_idx = (fold + 1) * fold_size if fold < k_folds - 1 else D.shape[1]
+            test_indices = indices[start_idx:end_idx]
+            
+            # Define training fold indices
+            train_indices = np.concatenate([indices[:start_idx], indices[end_idx:]])
+            
+            # Split data
+            DTR_fold = D[:, train_indices]
+            LTR_fold = L[train_indices]
+            DTE_fold = D[:, test_indices]
+            LTE_fold = L[test_indices]
+            
+            # Train model and compute scores
+            trained_model = model.trainClassifier(DTR_fold, LTR_fold, *model_args)
+            
+            if calibrated:
+                # Calibration requires additional logic - placeholder for now
+                scores_fold = trained_model.computeLLR(DTE_fold)
+            else:
+                scores_fold = trained_model.computeLLR(DTE_fold)
+            
+            all_scores.extend(scores_fold)
+            all_labels.extend(LTE_fold)
+        
+        all_scores = np.array(all_scores)
+        all_labels = np.array(all_labels)
+        
+        min_dcf = ClassificationMetrics.min_DCF(all_scores, all_labels, pi, Cfn, Cfp)
+        act_dcf = ClassificationMetrics.actual_DCF(all_scores, all_labels, pi, Cfn, Cfp)
+        
+        return min_dcf, act_dcf
 
 
-def vcol(v):
-    return v.reshape(v.size, 1)
+class Visualizer:
+    """Plotting and visualization utilities."""
+    
+    def __init__(self, output_dir: Union[str, Path] = ''):
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(exist_ok=True)
+    
+    def plot_feature_distributions(
+        self, 
+        DTR: np.ndarray, 
+        LTR: np.ndarray, 
+        name: str,
+        feature_names: Optional[List[str]] = None
+    ) -> None:
+        """Plot feature distributions for each class."""
+        if feature_names is None:
+            feature_names = [f'Feature {i}' for i in range(DTR.shape[0])]
+        
+        D0 = DTR[:, LTR == 0]
+        D1 = DTR[:, LTR == 1]
+        
+        for i in range(DTR.shape[0]):
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            ax.hist(D0[i, :], bins=50, density=True, alpha=0.7, 
+                   color='orange', label='Class 0', edgecolor='darkorange')
+            ax.hist(D1[i, :], bins=50, density=True, alpha=0.7, 
+                   color='cornflowerblue', label='Class 1', edgecolor='royalblue')
+            
+            ax.set_title(feature_names[i])
+            ax.set_xlabel('Feature Value')
+            ax.set_ylabel('Density')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            plt.savefig(self.output_dir / f'{name}_feature_{i}.png', dpi=300, bbox_inches='tight')
+            plt.close()
+    
+    def plot_correlation_heatmap(self, DTR: np.ndarray, LTR: np.ndarray) -> None:
+        """Plot correlation heatmaps for different class splits."""
+        datasets = {
+            'whole_dataset': DTR,
+            'class_0': DTR[:, LTR == 0],
+            'class_1': DTR[:, LTR == 1]
+        }
+        
+        for name, data in datasets.items():
+            corr_matrix = np.abs(np.corrcoef(data))
+            
+            fig, ax = plt.subplots(figsize=(8, 6))
+            im = ax.imshow(corr_matrix, cmap='viridis', vmin=0, vmax=1)
+            
+            ax.set_title(f'Correlation Matrix - {name.replace("_", " ").title()}')
+            plt.colorbar(im)
+            
+            plt.tight_layout()
+            plt.savefig(self.output_dir / f'correlation_{name}.png', dpi=300, bbox_inches='tight')
+            plt.close()
+    
+    def plot_ROC_curve(
+        self, 
+        results: List[Tuple[np.ndarray, str, str]], 
+        labels: np.ndarray,
+        filename: str,
+        title: str = "ROC Curve"
+    ) -> None:
+        """Plot ROC curves for multiple models."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        for scores, label, color in results:
+            FPR, _, _, TPR = ClassificationMetrics.compute_ROC_DET_curves(scores, labels)
+            ax.plot(FPR, TPR, label=label, color=color, linewidth=2)
+        
+        ax.plot([0, 1], [0, 1], 'k--', alpha=0.5, label='Random')
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(self.output_dir / f'roc_{filename}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    def plot_DET_curve(
+        self, 
+        results: List[Tuple[np.ndarray, str, str]], 
+        labels: np.ndarray,
+        filename: str,
+        title: str = "DET Curve"
+    ) -> None:
+        """Plot DET curves for multiple models."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        for scores, label, color in results:
+            FPR, FNR, _, _ = ClassificationMetrics.compute_ROC_DET_curves(scores, labels)
+            ax.plot(FPR, FNR, label=label, color=color, linewidth=2)
+        
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('False Negative Rate')
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(self.output_dir / f'det_{filename}.png', dpi=300, bbox_inches='tight')
+        plt.close()
 
 
-def empirical_mean(X):
-    return vcol(X.mean(1))
-
-
-def empirical_covariance(X):
-    mu = empirical_mean(X)
-    C = numpy.dot((X - mu), (X - mu).T) / X.shape[1]
-    return C
-
-
-def PCA(D, m):
-    DC = (D - empirical_mean(D))
-    C = (1 / DC.shape[1]) * numpy.dot(DC, DC.T)
-    s, U = numpy.linalg.eigh(C)
-    P = U[:, ::-1][:, 0:m]
-    return numpy.dot(P.T, D), P
-
-
-def LDA(D, L, m):
-    SW = empirical_withinclass_cov(D, L)
-    SB = empirical_betweenclass_cov(D, L)
-    s, U = scipy.linalg.eigh(SB, SW)
-    W = U[:, ::-1][:, 0:m]
-    return numpy.dot(W.T, D), W
-
-
-def assign_labels(scores, pi, Cfn, Cfp, th=None):
-    if th is None:
-        th = - numpy.log(pi * Cfn) + numpy.log((1 - pi) * Cfp)
-    P = scores > th
-    return numpy.int32(P)
-
-
-def conf_matrix(Pred, labels):
-    C = numpy.zeros((2, 2))
-    C[0, 0] = ((Pred == 0) * (labels == 0)).sum()
-    C[0, 1] = ((Pred == 0) * (labels == 1)).sum()
-    C[1, 0] = ((Pred == 1) * (labels == 0)).sum()
-    C[1, 1] = ((Pred == 1) * (labels == 1)).sum()
-    return C
-
-
-def DCFu(Conf, pi, Cfn, Cfp):
-    FNR = Conf[0, 1]/(Conf[0, 1] + Conf[1, 1])
-    FPR = Conf[1, 0]/(Conf[0, 0] + Conf[1, 0])
-    return pi * Cfn * FNR + (1 - pi) * Cfp * FPR
-
-
-def DCF(Conf, pi, Cfn, Cfp):
-    _DCFu = DCFu(Conf, pi, Cfn, Cfp)
-    return _DCFu / min(pi * Cfn, (1 - pi) * Cfp)
-
-
-def minDCF(scores, labels, pi, Cfn, Cfp):
-    t = numpy.array(scores)
-    t.sort()
-
-    dcfList = []
-    for _th in t:
-        dcfList.append(actDCF(scores, labels, pi, Cfn, Cfp, th=_th))
-    return numpy.array(dcfList).min()
-
-
-def actDCF(scores, labels, pi, Cfn, Cfp, th=None):
-    Pred = assign_labels(scores, pi, Cfn, Cfp, th=th)
-    CM = conf_matrix(Pred, labels)
-    return DCF(CM, pi, Cfn, Cfp)
-
-
-def compute_rates_values(scores, labels):
-    t = numpy.array(scores)
-    t.sort()
-    t = numpy.concatenate([numpy.array([-numpy.inf]), t, numpy.array([numpy.inf])])
-    FPR = []
-    FNR = []
-    for threshold in t:
-        Pred = numpy.int32(scores > threshold)
-        Conf = conf_matrix(Pred, labels)
-        FPR.append(Conf[1, 0]/(Conf[1, 0] + Conf[0, 0]))
-        FNR.append(Conf[0, 1]/(Conf[0, 1] + Conf[1, 1]))
-    return numpy.array(FPR), numpy.array(FNR), 1 - numpy.array(FPR), 1 - numpy.array(FNR)
-
-
-def compute_calibrated_scores_param(scores, labels):
-    scores = vrow(scores)
-    model = LR.LogisticRegression().trainClassifier(scores, labels, 1e-4, 0.5)
-    alpha = model.w
-    beta = model.b
-    return alpha, beta
-
-
-def plot_features(DTR, LTR, name, defPath = ''):
-    D0 = DTR[:, LTR == 0]
-    D1 = DTR[:, LTR == 1]
-    labels = {
-        0: 'Mean of the integrated profile',
-        1: 'Standard deviation of the integrated profile',
-        2: 'Excess kurtosis of the integrated profile',
-        3: 'Skewness of the integrated profile',
-        4: 'Mean of the DM-SNR curve',
-        5: 'Standard deviation of the DM-SNR curve',
-        6: 'Excess kurtosis of the DM-SNR curve',
-        7: 'Skewness of the DM-SNR curve',
-    }
-    for i in range(DTR.shape[0]):
-        fig = plt.figure()
-        plt.title(labels[i])
-        plt.hist(D0[i, :], bins=70, density=True, alpha=0.7, facecolor='orange', label='Negative pulsar signal', edgecolor='darkorange')
-        plt.hist(D1[i, :], bins=70, density=True, alpha=0.7, facecolor='cornflowerblue', label='Positive pulsar signal', edgecolor='royalblue')
-        plt.legend(loc='best')
-        plt.savefig(defPath + '%s_%d.jpg' % (name, i), dpi=300, bbox_inches='tight')
-        plt.close(fig)
-
-
-def plot_correlations(DTR, LTR, defPath = ''):
-    cmap = ['Greys', 'Reds', 'Blues']
-    labels = {
-        0: 'Whole dataset (absolute Pearson coeff.)',
-        1: 'Negative pulsar signal (absolute Pearson coeff.)',
-        2: 'Positive pulsar signal (absolute Pearson coeff.)'
-    }
-
-    CorrCoeff = {
-        0: numpy.abs(numpy.corrcoef(DTR)),
-        1: numpy.abs(numpy.corrcoef(DTR[:, LTR == 0])),
-        2: numpy.abs(numpy.corrcoef(DTR[:, LTR == 1]))
-    }
-    for i in range(3):
-        fig = plt.figure()
-        plt.title(labels[i])
-        plt.imshow(CorrCoeff[i], cmap=cmap[i], interpolation='nearest')
-        plt.savefig(defPath + 'heatmap_%d.jpg' % i, dpi=300, bbox_inches='tight')
-        plt.close(fig)
-
-
-def kfolds(D, L, pi, model, args, calibrated=False, folds = 5, Cfn = 1, Cfp = 1):
-    scores = []
-    Ds = numpy.array_split(D, folds, axis=1)
-    Ls = numpy.array_split(L, folds)
-
-    for i in range(folds):
-        DTRk, LTRk = numpy.hstack(
-            Ds[:i] + Ds[i+1:]), numpy.hstack(Ls[:i] + Ls[i+1:])
-        DTEk, LTEk = numpy.asanyarray(Ds[i]), numpy.asanyarray(Ls[i])
-        if calibrated:
-            scoresTrain = model.trainClassifier(DTRk, LTRk, *args).computeLLR(DTRk)
-            alpha, beta = compute_calibrated_scores_param(scoresTrain, LTRk)
-            scoresEval = model.computeLLR(DTEk)
-            computeLLR = alpha * scoresEval + beta - numpy.log(0.5/(1 - 0.5))
-        else:
-            computeLLR = model.trainClassifier(DTRk, LTRk, *args).computeLLR(DTEk)
-        scores.append(computeLLR)
-    minDCFtmp = minDCF(numpy.hstack(scores), L, pi, Cfn, Cfp)
-    actDCFtmp = actDCF(numpy.hstack(scores), L, pi, Cfn, Cfp)
-    return minDCFtmp, actDCFtmp
-
-
-def single_split(D, L, pi, model, args, calibrated=False, Cfn = 1, Cfp = 1):
-    (DTRk, LTRk), (DTEk, LTEk) = split_db_2to1(D, L)
-    scores = []
-    if calibrated:
-        scoresTrain = model.trainClassifier(DTRk, LTRk, *args).computeLLR(DTRk)
-        alpha, beta = compute_calibrated_scores_param(scoresTrain, LTRk)
-        scoresEval = model.computeLLR(DTEk)
-        scores = alpha * scoresEval + beta - numpy.log(0.5/(1 - 0.5))
-    else:
-        scores = model.trainClassifier(DTRk, LTRk, *args).computeLLR(DTEk)
-    minDCFtmp = minDCF(numpy.hstack(scores), LTEk, pi, Cfn, Cfp)
-    actDCFtmp = actDCF(numpy.hstack(scores), LTEk, pi, Cfn, Cfp)
-    return minDCFtmp, actDCFtmp
-
-
-def plot_minDCF_lr(l, y5, y1, y9, filename, title, defPath = ''):
-    fig = plt.figure()
-    plt.title(title)
-    plt.plot(l, numpy.array(y5), label='minDCF(π~ = 0.5)', color='r')
-    plt.plot(l, numpy.array(y1), label='minDCF(π~ = 0.1)', color='b')
-    plt.plot(l, numpy.array(y9), label='minDCF(π~ = 0.9)', color='g')
-    plt.xscale('log')
-    plt.ylim([0, 1])
-    plt.xlabel('λ')
-    plt.ylabel('minDCF')
-    plt.legend(loc='best')
-    plt.savefig(defPath + 'lr_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-
-
-def plot_minDCF_svm(C, y5, y1, y9, filename, title, type='linear', defPath = ''):
-    labels = {
-        0: 'minDCF(π~ = 0.5)' if type == 'linear' else ('minDCF(π~ = 0.5, γ = 1e-3)' if type == 'RBF' else 'minDCF(π~ = 0.5, c = 1)'),
-        1: 'minDCF(π~ = 0.1)' if type == 'linear' else ('minDCF(π~ = 0.5, γ = 1e-2)' if type == 'RBF' else 'minDCF(π~ = 0.5, c = 10)'),
-        2: 'minDCF(π~ = 0.9)' if type == 'linear' else ('minDCF(π~ = 0.5, γ = 1e-1)' if type == 'RBF' else 'minDCF(π~ = 0.5, c = 100)'),
-    }
-    fig = plt.figure()
-    plt.title(title)
-    plt.plot(C, numpy.array(y5), label=labels[0], color='r')
-    plt.plot(C, numpy.array(y1), label=labels[1], color='b')
-    plt.plot(C, numpy.array(y9), label=labels[2], color='g')
-    plt.xscale('log')
-    plt.ylim([0, 1])
-    plt.xlabel('C')
-    plt.ylabel('minDCF')
-    plt.legend(loc='best')
-    plt.savefig(defPath + 'svm_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-
-
-def plot_minDCF_gmm(components, y5, y1, y9, filename, title, defPath = ''):
-    fig = plt.figure()
-    plt.title(title)
-    plt.plot(components, numpy.array(y5), label = 'minDCF(π~ = 0.5)', color='r')
-    plt.plot(components, numpy.array(y1), label = 'minDCF(π~ = 0.1)', color='b')
-    plt.plot(components, numpy.array(y9), label = 'minDCF(π~ = 0.9)', color='g')
-    plt.ylim([0, 1])
-    plt.xlabel('components')
-    plt.ylabel('minDCF')
-    plt.legend(loc='best')
-    plt.savefig(defPath + 'gmm_minDCF_%s.jpg' % filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-
-
-def bayes_error_plot(p, minDCF, actDCF, filename, title, defPath = ''):
-    fig = plt.figure()
-    plt.title(title)
-    plt.plot(p, numpy.array(actDCF), label = 'actDCF', color='r')
-    plt.plot(p, numpy.array(minDCF), label = 'minDCF', color='b', linestyle='--')
-    plt.ylim([0, 1])
-    plt.xlim([-3, 3])
-    plt.xlabel('prior')
-    plt.ylabel('minDCF')
-    plt.legend(loc='best')
-    plt.savefig(defPath + 'bep_%s.jpg' % filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-
-
-def plot_ROC(results, LTE, filename, title, defPath = ''):
-    fig = plt.figure()
-    plt.title(title)
-    for result in results:
-        FPR, FNR, TNR, TPR = compute_rates_values(result[0], LTE)
-        plt.plot(FPR, TPR, label = result[1], color=result[2])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc='best')
-    plt.savefig(defPath + 'roc_%s.jpg' % filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-
-def plot_DET(results, LTE, filename, title, defPath = ''):
-    fig = plt.figure()
-    plt.title(title)
-    for result in results:
-        FPR, FNR, TNR, TPR = compute_rates_values(result[0], LTE)
-        plt.plot(FPR, FNR, label = result[1], color=result[2])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('False Negative Rate')
-    plt.legend(loc='best')
-    plt.savefig(defPath + 'det_%s.jpg' % filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
+# Backward compatibility aliases
+vrow = MLUtils.vrow
+vcol = MLUtils.vcol
+empirical_mean = MLUtils.empirical_mean
+empirical_covariance = MLUtils.empirical_covariance
+load_dataset_shuffle = DataLoader.load_dataset_shuffle
+split_db_2to1 = DataLoader.split_dataset
+features_gaussianization = FeatureProcessor.gaussianization
+PCA = FeatureProcessor.PCA
+LDA = FeatureProcessor.LDA
+empirical_withinclass_cov = CovarianceUtils.within_class_covariance
+empirical_betweenclass_cov = CovarianceUtils.between_class_covariance
+assign_labels = ClassificationMetrics.assign_labels
+conf_matrix = ClassificationMetrics.confusion_matrix
+DCFu = ClassificationMetrics.DCF_unnormalized
+DCF = ClassificationMetrics.DCF_normalized
+minDCF = ClassificationMetrics.min_DCF
+actDCF = ClassificationMetrics.actual_DCF
+compute_rates_values = ClassificationMetrics.compute_ROC_DET_curves
+kfolds = ModelEvaluation.k_fold_validation
