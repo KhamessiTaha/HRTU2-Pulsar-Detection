@@ -153,23 +153,26 @@ class MLPipeline:
         return DTR_pca
     
     def evaluate_model(self, DTR: np.ndarray, LTR: np.ndarray, model_name: str,
-                      validation_method: str = 'kfold', n_folds: int = 5) -> Dict[str, float]:
+                    validation_method: str = 'kfold', n_folds: int = 5) -> Dict[str, float]:
         """Evaluate a single model with given parameters"""
         model_config = self.models[model_name]
+        # CREATE MODEL INSTANCE HERE
         model = model_config.model_class()
         results = {}
         
         for prior in self.config.priors:
             if validation_method == 'kfold':
-                if hasattr(model_config.params, 'items'):
-                    params = tuple(model_config.params.values())
-                else:
-                    params = model_config.params
-                
-                min_dcf, act_dcf = utils.kfolds(DTR, LTR, prior, model, params, n_folds)
+                # PASS MODEL INSTANCE DIRECTLY
+                min_dcf, act_dcf = utils.kfolds(
+                    DTR, LTR, prior, model, 
+                    tuple(model_config.params.values()), 
+                    n_folds
+                )
             else:  # single split
-                min_dcf, act_dcf = utils.single_split(DTR, LTR, prior, model, 
-                                                     model_config.params)
+                min_dcf, act_dcf = utils.single_split(
+                    DTR, LTR, prior, model, 
+                    model_config.params
+                )
             
             results[f'prior_{prior}_minDCF'] = min_dcf
             results[f'prior_{prior}_actDCF'] = act_dcf

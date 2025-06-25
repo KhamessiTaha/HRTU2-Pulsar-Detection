@@ -6,6 +6,17 @@ from typing import Tuple, Optional, List, Union, Dict, Any
 from pathlib import Path
 import warnings
 
+# Import or define LogisticRegression here
+try:
+    from library import LogisticRegression
+except ImportError:
+    # Placeholder for LogisticRegression if not available
+    class LogisticRegression:
+        def trainClassifier(self, *args, **kwargs):
+            raise NotImplementedError("LogisticRegression class is not implemented or imported.")
+        def computeLLR(self, *args, **kwargs):
+            raise NotImplementedError("LogisticRegression class is not implemented or imported.")
+
 
 class MLUtils:
     """Machine Learning utilities for classification tasks."""
@@ -319,20 +330,13 @@ class ModelEvaluation:
     """Model evaluation utilities."""
     
     @staticmethod
-    def compute_calibrated_scores(scores: np.ndarray, L: np.ndarray, prior: float, calibrator_class) -> np.ndarray:
-        """Calibrate scores using logistic regression
-        
-        Args:
-            scores: Raw model scores
-            L: True labels
-            prior: Class prior probability  
-            calibrator_class: Logistic regression class to use for calibration
-        """
-        # Train calibrator
-        calibrator = calibrator_class()
-        calibrator.trainClassifier(MLUtils.vrow(scores), L, l=1e-4, pi=prior)
-    
-        # Compute calibrated scores
+    def compute_calibrated_scores(scores, L, prior):
+        """Calibrate scores using logistic regression"""
+        # Create calibrator (use simple LR without quadratic terms)
+        calibrator = LogisticRegression()
+        # Train on scores and labels
+        calibrator.trainClassifier(MLUtils.vrow(scores), L, l=1e-4, pi=prior, type='linear')
+        # Return calibrated log-likelihood ratios
         return calibrator.computeLLR(MLUtils.vrow(scores))
     
     @staticmethod
@@ -340,11 +344,10 @@ class ModelEvaluation:
         D: np.ndarray,
         L: np.ndarray,
         pi: float,
-        model_class: Any,
+        model: Any,  # This is now a model INSTANCE, not a class
         model_args: Tuple,
         k_folds: int = 5,
         calibrated: bool = False,
-        calibrator_class: Optional[Any] = None,
         Cfn: float = 1.0,
         Cfp: float = 1.0,
         random_seed: int = 0
@@ -372,20 +375,19 @@ class ModelEvaluation:
             DTE_fold = D[:, test_indices]
             LTE_fold = L[test_indices]
             
-            # Train model and compute scores
-            model = model_class()
-            model.trainClassifier(DTR_fold, LTR_fold, *model_args)
-            scores_fold = model.computeLLR(DTE_fold)
+            # Train model and compute scores - USE THE MODEL INSTANCE DIRECTLY
+            trained_model = model.trainClassifier(DTR_fold, LTR_fold, *model_args)
             
             if calibrated:
-                if calibrator_class is None:
-                    raise ValueError("calibrator_class must be provided when calibrated=True")
+                # Use the new calibration function
                 scores_fold = ModelEvaluation.compute_calibrated_scores(
-                    scores_fold, 
-                    LTR_fold, 
+                    trained_model.computeLLR(DTE_fold), 
+                    LTR_fold,
                     pi,
-                    calibrator_class
+                    model.__class__  # You may need to pass the calibrator class here
                 )
+            else:
+                scores_fold = trained_model.computeLLR(DTE_fold)
             
             all_scores.extend(scores_fold)
             all_labels.extend(LTE_fold)
@@ -397,7 +399,6 @@ class ModelEvaluation:
         act_dcf = ClassificationMetrics.actual_DCF(all_scores, all_labels, pi, Cfn, Cfp)
         
         return min_dcf, act_dcf
-
 
 class Visualizer:
     """Plotting and visualization utilities."""
