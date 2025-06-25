@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import logging
 from library import utils, GaussianClassifier as GC, LogisticRegression as LR, SVM, GMM
+import library.plotting as plotting
 
 
 # Configure logging
@@ -131,23 +132,22 @@ class MLPipeline:
         logger.info('Plotting features...')
         try:
             Path(output_dir).mkdir(exist_ok=True)
-            utils.plot_features(DTR, LTR, f'{output_dir}/plot_raw_features')
-            utils.plot_correlations(DTR, LTR, f'{output_dir}/plot_correlations')
+            plotting.plot_features(DTR, LTR, f'{output_dir}/plot_features')
             logger.info('Feature plots generated successfully')
         except Exception as e:
             logger.error(f'Error plotting features: {e}')
     
     def apply_pca(self, DTR: np.ndarray, DTE: np.ndarray = None, 
-                  n_components: int = None) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
-        """Apply PCA transformation"""
+                n_components: int = None) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """Apply PCA transformation with proper projection matrix handling"""
         if n_components is None or n_components >= DTR.shape[0]:
             return DTR if DTE is None else (DTR, DTE)
         
-        PCA_result = utils.PCA(DTR, n_components)
-        DTR_pca = PCA_result[0]
+        # Apply PCA and get projection matrix
+        DTR_pca, P = utils.PCA(DTR, n_components)
         
         if DTE is not None:
-            DTE_pca = np.dot(PCA_result[1].T, DTE)
+            DTE_pca = np.dot(P.T, DTE)  # Use same projection matrix for test data
             return DTR_pca, DTE_pca
         
         return DTR_pca
@@ -293,8 +293,9 @@ class MLPipeline:
             
             # Plot results
             title = f'raw' if pca_comp is None else f'pca{pca_comp}'
-            utils.plot_minDCF_lr(lambda_values, *prior_results.values(), 
-                                f'{output_dir}/lr_{title}', f'Logistic Regression / {title}')
+            plotting.plot_minDCF_lr(lambda_values, prior_results, 
+                        f'{output_dir}/lr_{title}.png', 
+                        f'Logistic Regression / {title}')
     
     def _plot_svm_validation_curves(self, DTR: np.ndarray, LTR: np.ndarray, 
                                     output_dir: str) -> None:
@@ -383,9 +384,9 @@ class MLPipeline:
                 act_dcf_vals.append(act_dcf)
             
             # Plot Bayes error
-            utils.bayes_error_plot(p_range, min_dcf_vals, act_dcf_vals,
-                                  f'{output_dir}/bayes_{model_key}', 
-                                  f'{model_name} / PCA=7')
+            plotting.bayes_error_plot(p_range, min_dcf_vals, act_dcf_vals,
+                         f'{output_dir}/bayes_{model_key}.png', 
+                         f'{model_name} / PCA=7')
             
             # With calibration
             min_dcf_cal = []
@@ -398,9 +399,9 @@ class MLPipeline:
                 min_dcf_cal.append(min_dcf)
                 act_dcf_cal.append(act_dcf)
             
-            utils.bayes_error_plot(p_range, min_dcf_cal, act_dcf_cal,
-                                  f'{output_dir}/bayes_cal_{model_key}',
-                                  f'Calibrated {model_name} / PCA=7')
+            plotting.bayes_error_plot(p_range, min_dcf_cal, act_dcf_cal,
+                         f'{output_dir}/bayes_cal_{model_key}.png',
+                         f'Calibrated {model_name} / PCA=7')
             
             calibration_results[model_key] = {
                 'uncalibrated': {'min_dcf': min_dcf_vals, 'act_dcf': act_dcf_vals},

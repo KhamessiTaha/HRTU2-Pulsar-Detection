@@ -1,4 +1,3 @@
-from distutils.debug import DEBUG
 import numpy
 import scipy.optimize
 import library.utils as utils
@@ -31,12 +30,12 @@ class LogisticRegression:
         self.LTR = L
         self.type = type
         DT = features_expansion(D) if type == 'quadratic' else D
-        K = L.max() + 1
+        K = 1
         M = DT.shape[0]
         obj = logreg_obj_wrapper(DT, L, l, pi)
         x, f, d = scipy.optimize.fmin_l_bfgs_b(
             obj,
-            x0=numpy.zeros(M * K + K),
+            x0=numpy.zeros(M + K),
             approx_grad=True,
         )
         self.w, self.b = x[0:M], x[-1]

@@ -56,7 +56,7 @@ def GMM_EM(DT, gmm, psi, type, diff = 1e-6):
                 newGmm.append((w, mu))
                 continue
             elif type == 'diag':
-                sigma *= numpy.eye(sigma.shape[0])
+                sigma = numpy.diag(numpy.diag(sigma))
             U, s, _ = numpy.linalg.svd(sigma)
             s[s<psi] = psi
             sigma = numpy.dot(U, utils.vcol(s) * U.T)

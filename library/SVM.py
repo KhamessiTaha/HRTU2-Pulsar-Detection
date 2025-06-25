@@ -48,13 +48,13 @@ class SVM:
         if(type == 'RBF'):
             self.gamma = gamma
             Dist = utils.vcol((D ** 2).sum(0)) + utils.vrow((D ** 2).sum(0)) - 2 * numpy.dot(D.T, D)
-            kernel = numpy.exp(-self.gamma * Dist) + (self.K ** 2)
+            kernel = numpy.exp(-self.gamma * Dist)
             H = numpy.dot(utils.vcol(self.Z), utils.vrow(self.Z)) * kernel
             self.w = dual_wrapper(D, H, self.bounds)
         if(type == 'poly'):
             self.c = c
             self.d = d
-            kernel = ((numpy.dot(D.T, D) + self.c) ** self.d) + (self.K ** 2)
+            kernel = ((numpy.dot(D.T, D) + self.c) ** self.d) 
             H = numpy.dot(utils.vcol(self.Z), utils.vrow(self.Z)) * kernel
             self.w = dual_wrapper(D, H, self.bounds)
         return self
@@ -66,8 +66,8 @@ class SVM:
             return numpy.dot(self.w.T, DTET)
         if(self.type == 'RBF'):
             Dist = utils.vcol((self.DTR ** 2).sum(0)) + utils.vrow((D ** 2).sum(0)) - 2 * numpy.dot(self.DTR.T, D)
-            kernel = numpy.exp(-self.gamma * Dist) + (self.K ** 2)
+            kernel = numpy.exp(-self.gamma * Dist)
             return numpy.dot(self.w * self.Z, kernel)
         if(self.type == 'poly'):
-            kernel = ((numpy.dot(self.DTR.T, D) + self.c) ** self.d) + (self.K ** 2)
+            kernel = ((numpy.dot(self.DTR.T, D) + self.c) ** self.d) 
             return numpy.dot(self.w * self.Z, kernel)

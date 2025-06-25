@@ -145,7 +145,7 @@ class FeatureProcessor:
         rank_DTE = np.zeros_like(DTE)
         for i in range(DTE.shape[0]):
             for j in range(DTE.shape[1]):
-                rank_DTE[i, j] = (DTR[i] < DTE[i, j]).sum() + 1
+                rank_DTE[i, j] = (DTR[i] <= DTE[i, j]).sum() 
         
         rank_DTE /= (DTR.shape[1] + 2)
         gaussianized_DTE = scipy.stats.norm.ppf(rank_DTE)
@@ -154,18 +154,13 @@ class FeatureProcessor:
     
     @staticmethod
     def PCA(D: np.ndarray, m: int) -> Tuple[np.ndarray, np.ndarray]:
-        """Principal Component Analysis dimensionality reduction."""
-        centered_data = D - MLUtils.empirical_mean(D)
-        covariance = np.dot(centered_data, centered_data.T) / centered_data.shape[1]
+        """Principal Component Analysis with projection matrix return"""
+        mu = empirical_mean(D)
+        C = empirical_covariance(D - mu)
+        _, U = np.linalg.eigh(C)
+        P = U[:, ::-1][:, 0:m]
+        return np.dot(P.T, D), P  # Return transformed data AND projection matrix
         
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-        
-        # Sort by eigenvalue magnitude (descending)
-        sorted_indices = np.argsort(eigenvalues)[::-1]
-        projection_matrix = eigenvectors[:, sorted_indices[:m]]
-        
-        return np.dot(projection_matrix.T, D), projection_matrix
-    
     @staticmethod
     def LDA(D: np.ndarray, L: np.ndarray, m: int) -> Tuple[np.ndarray, np.ndarray]:
         """Linear Discriminant Analysis dimensionality reduction."""
@@ -323,6 +318,17 @@ class ClassificationMetrics:
 class ModelEvaluation:
     """Model evaluation utilities."""
     
+    def compute_calibrated_scores(scores, L, prior):
+        """Calibrate scores using logistic regression"""
+        from .LogisticRegression import LogisticRegression  
+    
+        # Train calibrator
+        calibrator = LogisticRegression()
+        calibrator.trainClassifier(vrow(scores), L, l=1e-4, pi=prior)
+    
+        # Compute calibrated scores
+        return calibrator.computeLLR(vrow(scores))
+    
     @staticmethod
     def k_fold_validation(
         D: np.ndarray,
@@ -363,8 +369,11 @@ class ModelEvaluation:
             trained_model = model.trainClassifier(DTR_fold, LTR_fold, *model_args)
             
             if calibrated:
-                # Calibration requires additional logic - placeholder for now
-                scores_fold = trained_model.computeLLR(DTE_fold)
+                scores_fold = ModelEvaluation.compute_calibrated_scores(
+                    scores_fold, 
+                    LTR_fold, 
+                    pi
+                )
             else:
                 scores_fold = trained_model.computeLLR(DTE_fold)
             
@@ -379,6 +388,7 @@ class ModelEvaluation:
         
         return min_dcf, act_dcf
 
+    
 
 class Visualizer:
     """Plotting and visualization utilities."""
