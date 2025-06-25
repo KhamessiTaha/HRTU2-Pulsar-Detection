@@ -75,7 +75,7 @@ Binary classification:
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/pulsar-classification.git
+git clone https://github.com/KhamessiTaha/HRTU2-Pulsar-Detection.git
 cd pulsar-classification
 pip install -r requirements.txt
 ```
@@ -209,7 +209,7 @@ If you use this code in your research, please cite:
   author = {Taha Khamessi},
   title = {Machine Learning Framework for Pulsar Signal Classification},
   year = {2024},
-  url = {https://github.com/yourusername/pulsar-classification}
+  url = {https://github.com/KhamessiTaha/HRTU2-Pulsar-Detection}
 }
 ```
 
