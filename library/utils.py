@@ -155,8 +155,8 @@ class FeatureProcessor:
     @staticmethod
     def PCA(D: np.ndarray, m: int) -> Tuple[np.ndarray, np.ndarray]:
         """Principal Component Analysis with projection matrix return"""
-        mu = empirical_mean(D)
-        C = empirical_covariance(D - mu)
+        mu = MLUtils.empirical_mean(D)  # Fixed: was missing MLUtils prefix
+        C = MLUtils.empirical_covariance(D - mu)  # Fixed: added MLUtils prefix
         _, U = np.linalg.eigh(C)
         P = U[:, ::-1][:, 0:m]
         return np.dot(P.T, D), P  # Return transformed data AND projection matrix
@@ -318,26 +318,33 @@ class ClassificationMetrics:
 class ModelEvaluation:
     """Model evaluation utilities."""
     
-    def compute_calibrated_scores(scores, L, prior):
-        """Calibrate scores using logistic regression"""
-        from .LogisticRegression import LogisticRegression  
-    
+    @staticmethod
+    def compute_calibrated_scores(scores: np.ndarray, L: np.ndarray, prior: float, calibrator_class) -> np.ndarray:
+        """Calibrate scores using logistic regression
+        
+        Args:
+            scores: Raw model scores
+            L: True labels
+            prior: Class prior probability  
+            calibrator_class: Logistic regression class to use for calibration
+        """
         # Train calibrator
-        calibrator = LogisticRegression()
-        calibrator.trainClassifier(vrow(scores), L, l=1e-4, pi=prior)
+        calibrator = calibrator_class()
+        calibrator.trainClassifier(MLUtils.vrow(scores), L, l=1e-4, pi=prior)
     
         # Compute calibrated scores
-        return calibrator.computeLLR(vrow(scores))
+        return calibrator.computeLLR(MLUtils.vrow(scores))
     
     @staticmethod
     def k_fold_validation(
         D: np.ndarray,
         L: np.ndarray,
         pi: float,
-        model: Any,
+        model_class: Any,
         model_args: Tuple,
         k_folds: int = 5,
         calibrated: bool = False,
+        calibrator_class: Optional[Any] = None,
         Cfn: float = 1.0,
         Cfp: float = 1.0,
         random_seed: int = 0
@@ -366,16 +373,19 @@ class ModelEvaluation:
             LTE_fold = L[test_indices]
             
             # Train model and compute scores
-            trained_model = model.trainClassifier(DTR_fold, LTR_fold, *model_args)
+            model = model_class()
+            model.trainClassifier(DTR_fold, LTR_fold, *model_args)
+            scores_fold = model.computeLLR(DTE_fold)
             
             if calibrated:
+                if calibrator_class is None:
+                    raise ValueError("calibrator_class must be provided when calibrated=True")
                 scores_fold = ModelEvaluation.compute_calibrated_scores(
                     scores_fold, 
                     LTR_fold, 
-                    pi
+                    pi,
+                    calibrator_class
                 )
-            else:
-                scores_fold = trained_model.computeLLR(DTE_fold)
             
             all_scores.extend(scores_fold)
             all_labels.extend(LTE_fold)
@@ -388,7 +398,6 @@ class ModelEvaluation:
         
         return min_dcf, act_dcf
 
-    
 
 class Visualizer:
     """Plotting and visualization utilities."""
