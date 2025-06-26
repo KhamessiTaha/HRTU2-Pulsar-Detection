@@ -2,6 +2,7 @@ import numpy
 import scipy.special
 import library.utils as utils
 from library.GaussianClassifier import logpdf_GAU_ND
+from sklearn.mixture import GaussianMixture
 
 
 def logpdf_GMM(D, gmm):
@@ -78,20 +79,41 @@ def GMM_EM(DT, gmm, psi, type, diff = 1e-6):
 
 
 class GMM:
-
     def trainClassifier(self, D, L, components, type='full', psi=1e-2, alpha=1e-1):
-        D0 = D[:, L == 0]
-        D1 = D[:, L == 1]
-
-        self.gmm0 = GMM_LBG(D0, alpha, components, psi, type)
-        self.gmm1 = GMM_LBG(D1, alpha, components, psi, type)
-
+        # Map covariance types to sklearn
+        cov_map = {
+            'full': 'full',
+            'diag': 'diag',
+            'tied': 'tied'
+        }
+        
+        # Create models
+        self.gmm0 = GaussianMixture(
+            n_components=components,
+            covariance_type=cov_map[type],
+            reg_covar=psi,
+            max_iter=20,  # Strict iteration limit
+            n_init=1,     # Single initialization
+            init_params='random',
+            random_state=0
+        )
+        
+        self.gmm1 = GaussianMixture(
+            n_components=components,
+            covariance_type=cov_map[type],
+            reg_covar=psi,
+            max_iter=20,
+            n_init=1,
+            init_params='random',
+            random_state=0
+        )
+        
+        # Fit models
+        self.gmm0.fit(D[:, L == 0].T)
+        self.gmm1.fit(D[:, L == 1].T)
         return self
 
-
     def computeLLR(self, D):
-        S, logD0 = logpdf_GMM(D, self.gmm0)
-        S, logD1 = logpdf_GMM(D, self.gmm1)
+        logD0 = self.gmm0.score_samples(D.T)
+        logD1 = self.gmm1.score_samples(D.T)
         return logD1 - logD0
-
-

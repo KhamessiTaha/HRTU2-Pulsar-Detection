@@ -237,77 +237,104 @@ class MLPipeline:
         return combinations
     
     def comprehensive_evaluation(self, DTR: np.ndarray, LTR: np.ndarray) -> Dict[str, Any]:
-        """Run comprehensive evaluation across all models and PCA settings"""
         logger.info('Starting comprehensive evaluation...')
-        
         results = {}
         
         for pca_components in self.config.pca_components:
             pca_key = f'pca_{pca_components}' if pca_components < DTR.shape[0] else 'raw'
             results[pca_key] = {}
             
-            # Apply PCA if needed
+            # Apply PCA
             DTR_transformed = self.apply_pca(DTR, n_components=pca_components)
             
-            # Evaluate each model
-            for model_name in self.models.keys():
-                try:
-                    model_results = self.evaluate_model(DTR_transformed, LTR, model_name)
-                    results[pca_key][model_name] = model_results
-                    
-                    logger.info(f'Completed {model_name} with {pca_key}')
-                    
-                except Exception as e:
-                    logger.error(f'Error evaluating {model_name} with {pca_key}: {e}')
-                    results[pca_key][model_name] = {'error': str(e)}
+            # Parallel evaluation
+            with ProcessPoolExecutor() as executor:
+                futures = {}
+                for model_name in self.models.keys():
+                    futures[executor.submit(
+                        self._evaluate_model_parallel,
+                        DTR_transformed, LTR, model_name
+                    )] = model_name
+                
+                for future in as_completed(futures):
+                    model_name = futures[future]
+                    try:
+                        model_results = future.result()
+                        results[pca_key][model_name] = model_results
+                        logger.info(f'Completed {model_name} with {pca_key}')
+                    except Exception as e:
+                        logger.error(f'Error evaluating {model_name} with {pca_key}: {e}')
+                        results[pca_key][model_name] = {'error': str(e)}
         
         return results
     
+    def _evaluate_model_parallel(self, DTR, LTR, model_name):
+        """Wrapper for parallel evaluation"""
+        return self.evaluate_model(DTR, LTR, model_name)
+    
     def plot_validation_curves(self, DTR: np.ndarray, LTR: np.ndarray, 
-                              output_dir: str = 'plots') -> None:
+                            output_dir: str = 'plots') -> None:
         """Generate validation curves for hyperparameter tuning"""
         logger.info('Generating validation curves...')
         Path(output_dir).mkdir(exist_ok=True)
         
-        # Logistic Regression lambda curves
-        self._plot_lr_validation_curves(DTR, LTR, output_dir)
-        
-        # SVM C curves
-        self._plot_svm_validation_curves(DTR, LTR, output_dir)
-        
-        # GMM component curves
-        self._plot_gmm_validation_curves(DTR, LTR, output_dir)
-    
-    def _plot_lr_validation_curves(self, DTR: np.ndarray, LTR: np.ndarray, 
-                                   output_dir: str) -> None:
-        """Plot logistic regression validation curves"""
-        lambda_values = np.logspace(-5, 1, 20)
-        
-        for pca_comp in [None, 7, 6]:
-            DTR_pca = self.apply_pca(DTR, n_components=pca_comp)
+        # Use parallel execution for all validation curves
+        with ProcessPoolExecutor() as executor:
+            futures = []
             
+            # Submit all validation curve tasks
+            futures.append(executor.submit(self._plot_lr_validation_curves, DTR, LTR, output_dir))
+            futures.append(executor.submit(self._plot_svm_validation_curves, DTR, LTR, output_dir))
+            futures.append(executor.submit(self._plot_gmm_validation_curves, DTR, LTR, output_dir))
+            
+            # Wait for completion
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f'Validation curve generation failed: {e}')
+    
+    def _plot_lr_validation_curves(self, DTR, LTR, output_dir):
+        lambda_values = np.logspace(-5, 1, 7)  # Reduced from 20 to 7 points
+        # Only use best PCA config (7)
+        DTR_pca = self.apply_pca(DTR, n_components=7)
+        
+        # Parallel execution
+        with ProcessPoolExecutor() as executor:
+            futures = {}
+            for prior in self.config.priors:
+                for lambda_val in lambda_values:
+                    futures[executor.submit(
+                        self._eval_lr_point,
+                        DTR_pca, LTR, prior, lambda_val
+                    )] = (prior, lambda_val)
+            
+            # Collect results
             prior_results = {prior: [] for prior in self.config.priors}
-            
-            for lambda_val in lambda_values:
-                model = LR.LogisticRegression()
-                for prior in self.config.priors:
-                    min_dcf, _ = utils.kfolds(DTR_pca, LTR, prior, model, (lambda_val, 0.5))
-                    prior_results[prior].append(min_dcf)
-            
-            # Plot results
-            title = f'raw' if pca_comp is None else f'pca{pca_comp}'
-            plotting.plot_minDCF_lr(lambda_values, prior_results, 
-                        f'{output_dir}/lr_{title}.png', 
-                        f'Logistic Regression / {title}')
-    
+            for future in as_completed(futures):
+                prior, lambda_val = futures[future]
+                min_dcf = future.result()
+                prior_results[prior].append(min_dcf)
+        
+        # Plotting remains the same
+        plotting.plot_minDCF_lr(lambda_values, prior_results, 
+                            f'{output_dir}/lr_pca7.png', 
+                            'Logistic Regression / PCA=7')
+        
+    def _eval_lr_point(self, D, L, prior, lambda_val):
+        model = LR.LogisticRegression()
+        min_dcf, _ = utils.kfolds(D, L, prior, model, (lambda_val, 0.5))
+        return min_dcf    
+        
     def _plot_svm_validation_curves(self, DTR: np.ndarray, LTR: np.ndarray, 
                                     output_dir: str) -> None:
         """Plot SVM validation curves"""
-        C_values = np.logspace(-4, 2, 15)
+        C_values = np.logspace(-4, 2, 10)  # Reduce from 15 to 10 points
         
-        for kernel in ['linear', 'RBF', 'poly']:
-            DTR_pca = self.apply_pca(DTR, n_components=7)
-            
+        # Only test PCA=7 (remove raw data testing)
+        DTR_pca = self.apply_pca(DTR, n_components=7)
+        
+        for kernel in ['linear', 'RBF']:  # Remove 'poly' - often slowest
             prior_results = {prior: [] for prior in self.config.priors}
             
             for C_val in C_values:
@@ -315,38 +342,35 @@ class MLPipeline:
                 for prior in self.config.priors:
                     if kernel == 'linear':
                         params = ('linear', 0.5, False, 1, C_val)
-                    elif kernel == 'RBF':
+                    else:  # RBF
                         params = ('RBF', 0.5, False, 1, C_val, 0, 0, 1e-3)
-                    else:  # poly
-                        params = ('poly', 0.5, False, 1, C_val, 1, 2, 0)
                     
                     min_dcf, _ = utils.kfolds(DTR_pca, LTR, prior, model, params)
                     prior_results[prior].append(min_dcf)
             
             utils.plot_minDCF_svm(C_values, *prior_results.values(),
-                                 f'{output_dir}/svm_{kernel}', f'SVM {kernel} / PCA=7')
+                                f'{output_dir}/svm_{kernel}_pca7', f'SVM {kernel} / PCA=7')
     
     def _plot_gmm_validation_curves(self, DTR: np.ndarray, LTR: np.ndarray, 
                                     output_dir: str) -> None:
         """Plot GMM validation curves"""
-        components = [2, 4, 8, 16, 32]
+        components = [2, 4, 8, 16]  # Remove 32 - it's too expensive
         
-        for cov_type in ['full', 'diag', 'tied']:
-            for pca_comp in [None, 7]:
-                DTR_pca = self.apply_pca(DTR, n_components=pca_comp)
-                
-                prior_results = {prior: [] for prior in self.config.priors}
-                
-                for n_comp in components:
-                    model = GMM.GMM()
-                    for prior in self.config.priors:
-                        min_dcf, _ = utils.kfolds(DTR_pca, LTR, prior, model, (n_comp, cov_type))
-                        prior_results[prior].append(min_dcf)
-                
-                title = f'raw' if pca_comp is None else f'pca{pca_comp}'
-                utils.plot_minDCF_gmm(components, *prior_results.values(),
-                                     f'{output_dir}/gmm_{cov_type}_{title}',
-                                     f'GMM {cov_type} / {title}')
+        for cov_type in ['full', 'diag']:  # Remove 'tied' - most expensive
+            # Only test PCA=7 (best performing)
+            DTR_pca = self.apply_pca(DTR, n_components=7)
+            
+            prior_results = {prior: [] for prior in self.config.priors}
+            
+            for n_comp in components:
+                model = GMM.GMM()
+                for prior in self.config.priors:
+                    min_dcf, _ = utils.kfolds(DTR_pca, LTR, prior, model, (n_comp, cov_type))
+                    prior_results[prior].append(min_dcf)
+            
+            utils.plot_minDCF_gmm(components, *prior_results.values(),
+                                f'{output_dir}/gmm_{cov_type}_pca7',
+                                f'GMM {cov_type} / PCA=7')
     
     def score_calibration_analysis(self, DTR: np.ndarray, LTR: np.ndarray,
                                   output_dir: str = 'plots') -> Dict[str, Any]:
