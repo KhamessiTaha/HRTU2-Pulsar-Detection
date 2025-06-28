@@ -72,15 +72,15 @@ The HTRU2 dataset contains 17,898 pulsar candidates described by 8 continuous va
 ```
 HTRU2-Pulsar-Detection/
 ├── data/                           # Dataset files
-│   ├── HTRU_2.csv                        # Original HTRU2 data                     # Train/validation/test splits
+│   ├── HTRU_2.csv                  # Original HTRU2 data                    
 ├── notebooks/                      # Jupyter notebooks
-│   ├── 01_EDA.ipynb               # Exploratory Data Analysis
-│   ├── 02_Modeling.ipynb          # Model training and evaluation
-│   └── 03_Interpretability.ipynb  # SHAP analysis and feature importance
-├── src/                           # Source code modules
+│   ├── 01_EDA.ipynb                # Exploratory Data Analysis
+│   ├── 02_Modeling.ipynb           # Model training and evaluation
+│   └── 03_Interpretability.ipynb   # SHAP analysis and feature importance
+├── src/                            # Source code modules
 │   ├── __init__.py
 │   ├── models.py                  # Model implementations
-│   ├── preprocess.py             # Evaluation metrics and plots
+│   ├── preprocess.py              # Preprocessing methods and functiions
 │   └── utils.py                   # Utility functions
 ├── models/                        # Trained model artifacts
 │   ├── SVM_best.pkl
@@ -113,7 +113,7 @@ HTRU2-Pulsar-Detection/
 
 ### Best Performing Model
 - **Algorithm**: Support Vector Machine (SVM) with RBF kernel
-- **ROC AUC**: 0.9837 ± 0.0023
+- **ROC AUC**: 0.9708 ± 0.0023
 - **Precision**: 0.9156 ± 0.0156
 - **Recall**: 0.9234 ± 0.0134
 - **F1-Score**: 0.9195 ± 0.0098
