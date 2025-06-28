@@ -7,6 +7,7 @@
 [![Jupyter](https://img.shields.io/badge/Jupyter-F37626.svg?&style=flat&logo=Jupyter&logoColor=white)](https://jupyter.org/)
 
 ![Pulsar Visualization](results/figures/pca_analysis.png)
+![SHAP Summary Plot](results/figures/shap_summary_svm.png)
 
 A comprehensive machine learning pipeline for detecting pulsars in the HTRU2 dataset using various classification algorithms. This project implements state-of-the-art techniques for astronomical signal processing and classification, addressing the class imbalance challenge inherent in pulsar detection.
 
