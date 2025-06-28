@@ -31,7 +31,7 @@ Pulsars are rapidly rotating neutron stars that emit beams of electromagnetic ra
 - Develop robust classification models for pulsar detection
 - Handle severe class imbalance (91% non-pulsars vs 9% pulsars)
 - Implement feature engineering and selection techniques
-- Provide interpretable results using SHAP analysis
+- Provide interpretable results using feature importance analysis
 - Compare performance across multiple algorithms
 
 ### Scientific Context
@@ -72,15 +72,15 @@ The HTRU2 dataset contains 17,898 pulsar candidates described by 8 continuous va
 ```
 HTRU2-Pulsar-Detection/
 ├── data/                           # Dataset files
-│   ├── HTRU_2.csv                        # Original HTRU2 data                     # Train/validation/test splits
+│   ├── HTRU_2.csv                  # Original HTRU2 data                    
 ├── notebooks/                      # Jupyter notebooks
-│   ├── 01_EDA.ipynb               # Exploratory Data Analysis
-│   ├── 02_Modeling.ipynb          # Model training and evaluation
-│   └── 03_Interpretability.ipynb  # SHAP analysis and feature importance
-├── src/                           # Source code modules
+│   ├── 01_EDA.ipynb                # Exploratory Data Analysis
+│   ├── 02_Modeling.ipynb           # Model training and evaluation
+│   └── 03_Interpretability.ipynb   # Feature importance and interpretability
+├── src/                            # Source code modules
 │   ├── __init__.py
 │   ├── models.py                  # Model implementations
-│   ├── preprocess.py             # Evaluation metrics and plots
+│   ├── preprocess.py              # Preprocessing methods and functions
 │   └── utils.py                   # Utility functions
 ├── models/                        # Trained model artifacts
 │   ├── SVM_best.pkl
@@ -113,25 +113,36 @@ HTRU2-Pulsar-Detection/
 
 ### Best Performing Model
 - **Algorithm**: Support Vector Machine (SVM) with RBF kernel
-- **ROC AUC**: 0.9837 ± 0.0023
-- **Precision**: 0.9156 ± 0.0156
-- **Recall**: 0.9234 ± 0.0134
-- **F1-Score**: 0.9195 ± 0.0098
+- **Validation ROC AUC**: 0.9843
+- **Test ROC AUC**: 0.9708
+- **Test Precision**: 0.8287
+- **Test Recall**: 0.9146
+- **Test F1-Score**: 0.8696
 
-### Feature Importance (SHAP Analysis)
-1. **Mean of DM-SNR curve** (0.342 importance)
-2. **Excess kurtosis of integrated profile** (0.198 importance)
-3. **Standard deviation of DM-SNR curve** (0.165 importance)
-4. **Skewness of integrated profile** (0.142 importance)
-5. **Mean of integrated profile** (0.087 importance)
+### Feature Importance (SVM Analysis)
+1. **Excess kurtosis of integrated profile** (1.7413 importance)
+2. **Skewness of DM-SNR curve** (0.5286 importance)  
+3. **Standard deviation of DM-SNR curve** (0.4870 importance)
+4. **Mean of integrated profile** (0.4768 importance)
+5. **Excess kurtosis of DM-SNR curve** (0.4661 importance)
 
-### Model Comparison
+### Model Comparison (Validation Performance)
 | Model | ROC AUC | Precision | Recall | F1-Score |
 |-------|---------|-----------|--------|----------|
-| SVM | 0.9837 | 0.9156 | 0.9234 | 0.9195 |
-| Random Forest | 0.9821 | 0.9089 | 0.9178 | 0.9133 |
-| XGBoost | 0.9798 | 0.9034 | 0.9145 | 0.9089 |
-| Logistic Regression | 0.9654 | 0.8756 | 0.8834 | 0.8795 |
+| SVM | 0.9843 | 0.8287 | 0.9146 | 0.8696 |
+| LogisticRegression | 0.9837 | 0.7906 | 0.9207 | 0.8507 |
+| LightGBM | 0.9729 | 0.8506 | 0.9024 | 0.8757 |
+| XGBoost | 0.9720 | 0.8315 | 0.9024 | 0.8655 |
+| CatBoost | 0.9714 | 0.8287 | 0.9146 | 0.8696 |
+
+### Cross-Validation Results (ROC AUC)
+| Model | CV Mean | CV Std | CV Min | CV Max |
+|-------|---------|--------|--------|--------|
+| RandomForest | 0.997064 | 0.000780 | 0.996188 | 0.998177 |
+| XGBoost | 0.996502 | 0.000754 | 0.995705 | 0.997846 |
+| CatBoost | 0.996096 | 0.000678 | 0.995362 | 0.997289 |
+| LightGBM | 0.995919 | 0.000786 | 0.994984 | 0.997214 |
+| MLP | 0.991762 | 0.001428 | 0.989590 | 0.993915 |
 
 ## Getting Started
 
@@ -182,7 +193,7 @@ HTRU2-Pulsar-Detection/
    Execute notebooks in order:
    - `01_EDA.ipynb` → Exploratory Data Analysis
    - `02_Modeling.ipynb` → Model Training and Evaluation  
-   - `03_Interpretability.ipynb` → SHAP Analysis and Interpretation
+   - `03_Interpretability.ipynb` → Feature Importance Analysis and Interpretation
 
 ## Usage
 
@@ -190,8 +201,8 @@ HTRU2-Pulsar-Detection/
 
 **Data Preprocessing:**
 ```python
-from src.data_preprocessing import preprocess_data
-X_train, X_test, y_train, y_test = preprocess_data('data/raw/HTRU_2.csv')
+from src.preprocess import preprocess_data
+X_train, X_test, y_train, y_test = preprocess_data('data/HTRU_2.csv')
 ```
 
 **Model Training:**
@@ -202,59 +213,54 @@ model = train_svm_model(X_train, y_train)
 
 **Evaluation:**
 ```python
-from src.evaluation import evaluate_model
+from src.utils import evaluate_model
 metrics = evaluate_model(model, X_test, y_test)
-```
-
-### Command Line Interface
-
-```bash
-# Train all models
-python src/train_models.py --config models/model_configs.json
-
-# Evaluate specific model
-python src/evaluate.py --model svm --data data/processed/test_data.csv
-
-# Generate SHAP plots
-python src/interpretability.py --model models/best_svm_model.pkl
 ```
 
 ## Methodology
 
 ### Data Preprocessing
-- **Scaling**: StandardScaler for feature normalization
+- **Scaling**: RobustScaler for feature normalization (robust to outliers)
 - **Class Balancing**: SMOTE (Synthetic Minority Oversampling Technique)
-- **Feature Selection**: Recursive Feature Elimination with Cross-Validation
+- **Train/Validation/Test Split**: 70%/10%/20% stratified split
 
 ### Model Selection
 - **Cross-Validation**: 5-fold stratified cross-validation
 - **Hyperparameter Tuning**: GridSearchCV with ROC AUC optimization
-- **Ensemble Methods**: Voting classifier combining top 3 models
+- **Multiple Algorithms**: Comparison of 10 different classifiers
 
 ### Evaluation Metrics
 - **Primary**: ROC AUC (handles class imbalance well)
-- **Secondary**: Precision, Recall, F1-Score
-- **Visualization**: Confusion matrices, ROC curves, Precision-Recall curves
+- **Secondary**: Precision, Recall, F1-Score, MCC
+- **Specialized**: PR AUC, Balanced Accuracy, Specificity
 
 ## Results
 
 ### Performance Summary
-The SVM model achieved exceptional performance with a ROC AUC of 0.9837, demonstrating excellent discrimination between pulsars and non-pulsars. The model shows:
+The SVM model achieved exceptional performance with a validation ROC AUC of 0.9843 and test ROC AUC of 0.9708, demonstrating excellent discrimination between pulsars and non-pulsars. The model shows:
 
-- **High Precision**: 91.56% of predicted pulsars are actual pulsars
-- **High Recall**: 92.34% of actual pulsars are correctly identified
-- **Balanced Performance**: F1-score of 91.95% indicates good balance
+- **High Test Precision**: 82.87% of predicted pulsars are actual pulsars
+- **High Test Recall**: 91.46% of actual pulsars are correctly identified
+- **Balanced Performance**: Test F1-score of 86.96% indicates good balance
+- **Strong Generalization**: Minimal overfitting between validation and test performance
 
 ### Feature Insights
-- DM-SNR curve statistics are the most discriminative features
-- Integrated profile kurtosis provides significant classification power
-- Combined features achieve better performance than individual metrics
+- **Excess kurtosis of integrated profile** is the most discriminative feature
+- **DM-SNR curve statistics** (skewness and standard deviation) provide significant classification power
+- **Integrated profile statistics** complement DM-SNR features effectively
+- Combined features achieve substantially better performance than individual metrics
+
+### Data Processing Pipeline
+- **Balanced Training Set**: SMOTE increased training samples from 12,528 to 22,762 (50%/50% class distribution)
+- **Robust Scaling**: Applied to handle outliers in astronomical data
+- **Stratified Sampling**: Maintains class proportions across splits
 
 ### Astronomical Implications
 The high performance suggests that machine learning can reliably automate pulsar detection, potentially:
 - Reducing manual review time by 90%+
 - Discovering new pulsars in large-scale surveys
 - Enabling real-time pulsar candidate classification
+- Supporting next-generation radio telescope surveys
 
 ## Contributing
 
@@ -282,7 +288,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **HTRU2 Dataset**: R. J. Lyon et al. (University of Manchester)
 - **Original Paper**: Lyon, R. J., et al. "Fifty Years of Pulsar Candidate Selection: From simple filters to a new principled real-time classification approach." Monthly Notices of the Royal Astronomical Society 459.1 (2016): 1104-1123.
 - **Scikit-learn Community**: For excellent machine learning tools
-- **SHAP**: For interpretable machine learning insights
+- **Python Data Science Stack**: NumPy, Pandas, Matplotlib, Seaborn
 
 ## Citation
 
@@ -290,7 +296,7 @@ If you use this work in your research, please cite:
 
 ```bibtex
 @misc{htru2_pulsar_detection,
-  author = Taha Khamessi,
+  author = {Taha Khamessi},
   title = {HTRU2 Pulsar Detection: A Machine Learning Approach},
   year = {2025},
   publisher = {GitHub},
