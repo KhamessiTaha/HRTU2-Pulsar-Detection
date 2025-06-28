@@ -1,22 +1,63 @@
-# Updated .gitignore
-data
-data/raw/
-results/
+# Data files
+/data/
+/data/processed/
+/data/raw/
 
-# Byte-compiled
+# Model files
+/models/
+!/models/README.md  # Keep this file
+
+# Results
+/results/figures/
+/results/metrics/
+
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Notebooks
-.ipynb_checkpoints/
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
 
-# Environments
+# Environment
+.env
+.venv
+env/
 venv/
-.env/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE
 .vscode/
 .idea/
 
-# System
-.DS_Store
+# Latex
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.synctex.gz
+*.fls
+*.fdb_latexmk
