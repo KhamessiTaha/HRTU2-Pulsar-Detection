@@ -1,12 +1,17 @@
 # HTRU2 Pulsar Detection
 
+“This repository contains a complete machine learning pipeline for pulsar candidate classification in the HTRU2 dataset. The project evaluates and compares 10 ML models, applies robust preprocessing, and includes interpretability tools like SHAP to uncover feature insights. Our optimized SVM model achieves 97.08% ROC AUC, with astrophysically meaningful feature rankings. This framework is designed for both scientific discovery and operational deployment in large-scale radio surveys.”
+
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Jupyter](https://img.shields.io/badge/Jupyter-F37626.svg?&style=flat&logo=Jupyter&logoColor=white)](https://jupyter.org/)
 
 ![Pulsar Visualization](results/figures/pca_analysis.png)
+![SHAP Summary Plot](results/figures/shap_summary_svm.png)
 
 A comprehensive machine learning pipeline for detecting pulsars in the HTRU2 dataset using various classification algorithms. This project implements state-of-the-art techniques for astronomical signal processing and classification, addressing the class imbalance challenge inherent in pulsar detection.
+
+
 
 ## Table of Contents
 
