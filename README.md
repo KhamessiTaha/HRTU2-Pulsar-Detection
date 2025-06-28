@@ -8,6 +8,8 @@
 
 A comprehensive machine learning pipeline for detecting pulsars in the HTRU2 dataset using various classification algorithms. This project implements state-of-the-art techniques for astronomical signal processing and classification, addressing the class imbalance challenge inherent in pulsar detection.
 
+“This repository contains a complete machine learning pipeline for pulsar candidate classification in the HTRU2 dataset. The project evaluates and compares 10 ML models, applies robust preprocessing, and includes interpretability tools like SHAP to uncover feature insights. Our optimized SVM model achieves 97.08% ROC AUC, with astrophysically meaningful feature rankings. This framework is designed for both scientific discovery and operational deployment in large-scale radio surveys.”
+
 ## Table of Contents
 
 - [About the Project](#about-the-project)
